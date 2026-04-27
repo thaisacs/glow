@@ -62,6 +62,9 @@ bool CPUBackend::isOpSupported(const NodeInfo &NI) const {
   case Kinded::Kind::CPUConvDKKC8NodeKind:
     return NI.allInputsAndOutputsHaveSameElemKind({ElemKind::FloatTy});
 
+  case Kinded::Kind::CPUCeleraConvNodeKind:
+    return NI.allInputsAndOutputsHaveSameElemKind({ElemKind::FloatTy});
+
   // Delegate everything else to the LLVM backend.
   default:
     return LLVMBackend::isOpSupported(NI);

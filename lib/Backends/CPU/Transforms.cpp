@@ -18,6 +18,9 @@
 
 #include "glow/Graph/Graph.h"
 #include "glow/Graph/Nodes.h"
+#include "llvm/Support/CommandLine.h"
+
+extern llvm::cl::opt<bool> EnableCeleraConv;
 
 using namespace glow;
 using llvm::dyn_cast;
@@ -32,6 +35,7 @@ using llvm::isa;
 /// pre-swizzle the data in the weights to make the access pattern more
 /// efficient.
 static Node *optimizeCPUConv(ConvolutionNode *CN, Function *F) {
+  std::cout << "Thais: conv\n";
   auto depth = CN->getFilter().dims()[0];
   auto *M = F->getParent();
   auto group = CN->getGroup();
@@ -134,6 +138,31 @@ CPUBackend::transformPostLowering(Function *F, CompilationContext &,
   for (auto &node : F->getNodes()) {
     // Try to replace generic convolution with cpu-optimized version.
     if (auto *CN = dyn_cast<ConvolutionNode>(&node)) {
+
+      if (EnableCeleraConv) {
+        std::cout << "Thais: conv enabled\n";
+
+        // Skip depthwise conv
+        if (CN->getGroup() != 1) {
+          continue;
+        }
+
+        auto *newNode = F->addNode(new CPUCeleraConvNode(
+            CN->getName(),
+            CN->getResult().getType(),
+            CN->getInput(),
+            CN->getFilter(),
+            CN->getBias(),
+            CN->getKernels(),
+            CN->getStrides(),
+            CN->getPads(),
+            CN->getGroup()));
+
+        CN->getResult().replaceAllUsesOfWith(newNode);
+        changed = true;
+        continue;
+      }
+
       if (Node *NCN = optimizeCPUConv(CN, F)) {
         CN->getResult().replaceAllUsesOfWith(NCN);
         changed = true;

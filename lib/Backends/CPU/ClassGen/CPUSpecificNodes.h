@@ -33,6 +33,17 @@ BB.newBackendSpecificNode("CPUConvDKKC8")
     .setDocstring("This is a cpu-specific convolution implementation where the "
                   "filter is transposed to the shape [D/8, K, K, C, 8]");
 
+BB.newBackendSpecificNode("CPUCeleraConv")
+    .addInput("Input")
+    .addInput("Filter")
+    .addInput("Bias")
+    .addMember(MemberType::VectorUnsigned, "Kernels")
+    .addMember(MemberType::VectorUnsigned, "Strides")
+    .addMember(MemberType::VectorUnsigned, "Pads")
+    .addMember(MemberType::Unsigned, "Group")
+    .addResultFromCtorArg()
+    .setDocstring("Naive CPU convolution (Celera) without layout transformation");
+
 BB.includeBackendSpecificVerification("glow/CPUSpecificNodesVerification.h");
 
 #endif // GLOW_WITH_CPU

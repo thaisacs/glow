@@ -34,3 +34,19 @@ Error ONNXModelWriter::writeCPUConvDKKC8(const CPUConvDKKC8Node *node,
 
   return writeAllWithNode("CPUConvDKKC8", node, graph, proto);
 }
+
+Error ONNXModelWriter::writeCPUCeleraConv(
+    const CPUCeleraConvNode *node,
+    GraphType &graph) {
+
+  auto *proto = graph.add_node();
+
+  // Standard Conv attributes
+  addValueAttribute(proto, "kernel_shape", node->getKernels());
+  addValueAttribute(proto, "strides", node->getStrides());
+  addValueAttribute(proto, "pads", node->getPads());
+  addValueAttribute(proto, "group", node->getGroup());
+
+  // Export as standard ONNX Conv
+  return writeAllWithNode("Conv", node, graph, proto);
+}

@@ -298,3 +298,87 @@ void libjit_convDKKC8_f(float *outW, const float *inW, const float *filterW,
 }
 
 } // extern "C"
+
+extern "C" {
+
+void libjit_celera_conv_f(float *outW, const float *inW,
+                          const float *filterW, const float *biasW,
+                          const dim_t *outWdims, const dim_t *inWdims,
+                          const dim_t *filterWdims, const dim_t *biasWdims,
+                          const dim_t *kernelSizes,
+                          const dim_t *strides,
+                          const dim_t *pads) {
+
+  // NHWC layout
+  dim_t N = inWdims[0];
+  dim_t H = inWdims[1];
+  dim_t W = inWdims[2];
+  dim_t C = inWdims[3];
+
+  dim_t outH = outWdims[1];
+  dim_t outW_ = outWdims[2];
+  dim_t K = outWdims[3];
+
+  dim_t kernel_h = kernelSizes[0];
+  dim_t kernel_w = kernelSizes[1];
+
+  dim_t stride_h = strides[0];
+  dim_t stride_w = strides[1];
+
+  dim_t pad_t = pads[0];
+  dim_t pad_l = pads[1];
+
+  // For each batch
+  for (dim_t n = 0; n < N; n++) {
+
+    // Initialize output with bias
+    libjit_conv_init_output_with_bias(n, outW, biasW,
+                                      outWdims, biasWdims);
+
+    // For each output spatial position
+    for (dim_t outx = 0; outx < outH; outx++) {
+      for (dim_t outy = 0; outy < outW_; outy++) {
+
+        // For each output channel
+        for (dim_t d = 0; d < K; d++) {
+
+          float sum = 0.0f;
+
+          // For each filter position
+          for (dim_t fx = 0; fx < kernel_h; fx++) {
+            for (dim_t fy = 0; fy < kernel_w; fy++) {
+
+              dim_t inx = outx * stride_h - pad_t + fx;
+              dim_t iny = outy * stride_w - pad_l + fy;
+
+              // Padding check
+              if (inx < 0 || iny < 0 || inx >= H || iny >= W)
+                continue;
+
+              // For each input channel
+              for (dim_t fd = 0; fd < C; fd++) {
+
+                auto inIdx = libjit_getXYZW(inWdims, n, inx, iny, fd);
+                float in = inW[inIdx];
+
+                auto filterIdx =
+                    libjit_getXYZW(filterWdims, d, fx, fy, fd);
+                float f = filterW[filterIdx];
+
+                sum += f * in;
+              }
+            }
+          }
+
+          auto outIdx =
+              libjit_getXYZW(outWdims, n, outx, outy, d);
+
+          // Accumulate with bias-initialized output
+          outW[outIdx] += sum;
+        }
+      }
+    }
+  }
+}
+
+} // extern "C"

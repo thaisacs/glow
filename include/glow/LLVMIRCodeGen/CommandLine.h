@@ -83,4 +83,6 @@ extern llvm::cl::opt<bool> bundleAPIVerbose;
 /// Option to add other external object files to the bundle.
 extern llvm::cl::list<std::string> bundleObjectsOpt;
 
+extern llvm::cl::opt<bool> EnableCeleraConv;
+
 #endif // GLOW_LLVMIRCODEGEN_COMMANDLINE_H

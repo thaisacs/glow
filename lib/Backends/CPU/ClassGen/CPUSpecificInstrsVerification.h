@@ -33,4 +33,8 @@ void CPUConvDKKC8Inst::verify() const {
          "Invalid Element Type");
 }
 
+void CPUCeleraConvInst::verify() const {
+  // empty
+}
+
 #endif // GLOW_WITH_CPU
