@@ -40,7 +40,6 @@ BB.newBackendSpecificNode("CPUCeleraConv")
     .addMember(MemberType::VectorUnsigned, "Kernels")
     .addMember(MemberType::VectorUnsigned, "Strides")
     .addMember(MemberType::VectorUnsigned, "Pads")
-    .addMember(MemberType::Unsigned, "Group")
     .addResultFromCtorArg()
     .setDocstring("Naive CPU convolution (Celera) without layout transformation");
 

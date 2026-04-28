@@ -139,6 +139,7 @@ void CPULLVMIRGen::generateLLVMIRForInstr(llvm::IRBuilder<> &builder,
     auto *pads = emitConstDimTArray(builder, CI->getPads());
 
     const char *kernelName = "celera_conv";
+    //const char *kernelName = "convMO436";
     auto *F = getFunction(kernelName, dest->getElementType());
 
     createCall(builder, F,

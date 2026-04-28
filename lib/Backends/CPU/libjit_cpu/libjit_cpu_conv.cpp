@@ -301,84 +301,226 @@ void libjit_convDKKC8_f(float *outW, const float *inW, const float *filterW,
 
 extern "C" {
 
-void libjit_celera_conv_f(float *outW, const float *inW,
-                          const float *filterW, const float *biasW,
-                          const dim_t *outWdims, const dim_t *inWdims,
-                          const dim_t *filterWdims, const dim_t *biasWdims,
-                          const dim_t *kernelSizes,
-                          const dim_t *strides,
-                          const dim_t *pads) {
+//void libjit_celera_conv_f(float *outW, const float *inW,
+//                          const float *filterW, const float *biasW,
+//                          const dim_t *outWdims, const dim_t *inWdims,
+//                          const dim_t *filterWdims, const dim_t *biasWdims,
+//                          const dim_t *kernelSizes,
+//                          const dim_t *strides,
+//                          const dim_t *pads) {
+//
+//  // NHWC layout
+//  dim_t N = inWdims[0];
+//  dim_t H = inWdims[1];
+//  dim_t W = inWdims[2];
+//  dim_t C = inWdims[3];
+//
+//  dim_t outH = outWdims[1];
+//  dim_t outW_ = outWdims[2];
+//  dim_t K = outWdims[3];
+//
+//  dim_t kernel_h = kernelSizes[0];
+//  dim_t kernel_w = kernelSizes[1];
+//
+//  dim_t stride_h = strides[0];
+//  dim_t stride_w = strides[1];
+//
+//  dim_t pad_t = pads[0];
+//  dim_t pad_l = pads[1];
+//
+//  // For each batch
+//  for (dim_t n = 0; n < N; n++) {
+//
+//    // Initialize output with bias
+//    libjit_conv_init_output_with_bias(n, outW, biasW,
+//                                      outWdims, biasWdims);
+//
+//    // For each output spatial position
+//    for (dim_t outx = 0; outx < outH; outx++) {
+//      for (dim_t outy = 0; outy < outW_; outy++) {
+//
+//        // For each output channel
+//        for (dim_t d = 0; d < K; d++) {
+//
+//          float sum = 0.0f;
+//
+//          // For each filter position
+//          for (dim_t fx = 0; fx < kernel_h; fx++) {
+//            for (dim_t fy = 0; fy < kernel_w; fy++) {
+//
+//              dim_t inx = outx * stride_h - pad_t + fx;
+//              dim_t iny = outy * stride_w - pad_l + fy;
+//
+//              // Padding check
+//              if (inx < 0 || iny < 0 || inx >= H || iny >= W)
+//                continue;
+//
+//              // For each input channel
+//              for (dim_t fd = 0; fd < C; fd++) {
+//
+//                auto inIdx = libjit_getXYZW(inWdims, n, inx, iny, fd);
+//                float in = inW[inIdx];
+//
+//                auto filterIdx =
+//                    libjit_getXYZW(filterWdims, d, fx, fy, fd);
+//                float f = filterW[filterIdx];
+//
+//                sum += f * in;
+//              }
+//            }
+//          }
+//
+//          auto outIdx =
+//              libjit_getXYZW(outWdims, n, outx, outy, d);
+//
+//          // Accumulate with bias-initialized output
+//          outW[outIdx] += sum;
+//        }
+//      }
+//    }
+//  }
+//}
 
-  // NHWC layout
-  dim_t N = inWdims[0];
-  dim_t H = inWdims[1];
-  dim_t W = inWdims[2];
-  dim_t C = inWdims[3];
+extern "C" {
+void libjit_convMO436_f(float *outW, const float *inW, const float *filterW,
+                        const float *biasW, const dim_t *outWdims,
+                        const dim_t *inWdims, const dim_t *filterWdims,
+                        const dim_t *biasWdims, const dim_t *kernelSizes,
+                        const dim_t *strides, const dim_t *pads) {
 
-  dim_t outH = outWdims[1];
-  dim_t outW_ = outWdims[2];
-  dim_t K = outWdims[3];
-
+  dim_t pad_t = pads[0];
+  dim_t pad_l = pads[1];
+  dim_t stride_h = strides[0];
+  dim_t stride_w = strides[1];
   dim_t kernel_h = kernelSizes[0];
   dim_t kernel_w = kernelSizes[1];
+
+  // For each input in the batch:
+  for (dim_t n = 0; n < inWdims[0]; n++) {
+    libjit_conv_init_output_with_bias(n, outW, biasW, outWdims, biasWdims);
+    for (size_t filter = 0; filter < filterWdims[0]; filter++) {
+      for (size_t outx = 0; outx < outWdims[1]; outx++) {
+        for (size_t outy = 0; outy < outWdims[2]; outy++) {
+          float temp = 0.;
+          for (size_t ch = 0; ch < inWdims[3]; ch++) {
+            for (size_t fx = 0; fx < kernel_h; fx++) {
+              for (size_t fy = 0; fy < kernel_w; fy++) {
+                auto inX = outx * stride_h - pad_t + fx;
+                auto inY = outy * stride_w - pad_l + fy;
+                // ignore if indexes are out of boundaries
+                if (inX < 0 || inY < 0 || inX >= (sdim_t)inWdims[1] ||
+                    inY >= (sdim_t)inWdims[2]) {
+                  continue;
+                }
+                auto inIdx = libjit_getXYZW(inWdims, n, inX, inY, ch);
+                auto filterIdx =
+                    libjit_getXYZW(filterWdims, filter, fx, fy, ch);
+                temp += inW[inIdx] * filterW[filterIdx];
+              }
+            }
+          }
+          auto outIdx = libjit_getXYZW(outWdims, n, outx, outy, filter);
+          outW[outIdx] = outW[outIdx] + temp;
+        } // Output Width
+      }   // Output Height
+    }     // Filters
+  }       // Input
+}
+}
+
+extern "C" {
+
+// -----------------------------------------------------------------------------
+// Assignment (Celera Convolution):
+// -----------------------------------------------------------------------------
+
+void libjit_celera_conv_f(
+    float *outW, const float *inW, const float *filterW,
+    const float *biasW,
+    const dim_t *outWdims, const dim_t *inWdims,
+    const dim_t *filterWdims, const dim_t *biasWdims,
+    const dim_t *kernelSizes,
+    const dim_t *strides, const dim_t *pads) {
+
+  // NHWC Format
+  dim_t pad_t = pads[0];
+  dim_t pad_l = pads[1];
 
   dim_t stride_h = strides[0];
   dim_t stride_w = strides[1];
 
-  dim_t pad_t = pads[0];
-  dim_t pad_l = pads[1];
+  dim_t kernel_h = kernelSizes[0];
+  dim_t kernel_w = kernelSizes[1];
 
-  // For each batch
-  for (dim_t n = 0; n < N; n++) {
+  dim_t inChannels  = inWdims[3];
+  dim_t outChannels = outWdims[3];
 
-    // Initialize output with bias
-    libjit_conv_init_output_with_bias(n, outW, biasW,
-                                      outWdims, biasWdims);
+  // For each input in the batch:
+  for (dim_t n = 0; n < inWdims[0]; n++) {
 
-    // For each output spatial position
-    for (dim_t outx = 0; outx < outH; outx++) {
-      for (dim_t outy = 0; outy < outW_; outy++) {
+    // Initialize the output frame for the N'th slice with the bias.
+    // Later we will accumulate values into this slice.
+    //Libjit_conv_init_output_with_bias(
+    //    outW, outWdims, n, biasW, biasWdims);
+    libjit_conv_init_output_with_bias(
+      n,          // batch index (dim_t)
+      outW,       // output buffer
+      biasW,      // bias
+      outWdims,   // output dims
+      biasWdims   // bias dims
+    );
 
-        // For each output channel
-        for (dim_t d = 0; d < K; d++) {
+    // For each (x,y) step in the input/output tensors:
+    for (dim_t outx = 0; outx < outWdims[1]; outx++) {
+      for (dim_t outy = 0; outy < outWdims[2]; outy++) {
 
-          float sum = 0.0f;
+        // For each element in the convolution-filter:
+        for (dim_t fx = 0; fx < kernel_h; fx++) {
+          for (dim_t fy = 0; fy < kernel_w; fy++) {
 
-          // For each filter position
-          for (dim_t fx = 0; fx < kernel_h; fx++) {
-            for (dim_t fy = 0; fy < kernel_w; fy++) {
+            // Calculate the specific input x,y that we process
+            dim_t inx = (dim_t)outx * stride_h - pad_t + fx;
+            dim_t iny = (dim_t)outy * stride_w - pad_l + fy;
 
-              dim_t inx = outx * stride_h - pad_t + fx;
-              dim_t iny = outy * stride_w - pad_l + fy;
+            // Ignore index access below zero (due to padding)
+            if (inx < 0 || iny < 0 ||
+                inx >= inWdims[1] || iny >= inWdims[2]) {
+              continue;
+            }
 
-              // Padding check
-              if (inx < 0 || iny < 0 || inx >= H || iny >= W)
-                continue;
+            // For each output channel:
+            for (dim_t d = 0; d < outChannels; d++) {
 
-              // For each input channel
-              for (dim_t fd = 0; fd < C; fd++) {
+              // Perform the heart of the convolution.
+              float sum = 0.0;
 
+              // For each input channel:
+              for (dim_t fd = 0; fd < inChannels; fd++) {
+
+                // Load a single pixel from the input image and broadcast it.
                 auto inIdx = libjit_getXYZW(inWdims, n, inx, iny, fd);
                 float in = inW[inIdx];
 
+                // Load 1 element from the filter layer.
                 auto filterIdx =
                     libjit_getXYZW(filterWdims, d, fx, fy, fd);
-                float f = filterW[filterIdx];
+                float ff0 = filterW[filterIdx];
 
-                sum += f * in;
+                sum += ff0 * in;
               }
+
+              // Store the results to the output buffer.
+              auto outIdx =
+                  libjit_getXYZW(outWdims, n, outx, outy, d);
+              outW[outIdx] += sum;
             }
           }
-
-          auto outIdx =
-              libjit_getXYZW(outWdims, n, outx, outy, d);
-
-          // Accumulate with bias-initialized output
-          outW[outIdx] += sum;
         }
       }
     }
   }
 }
+
+} // extern "C"
 
 } // extern "C"

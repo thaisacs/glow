@@ -129,6 +129,31 @@ static Node *optimizeCPUMaxSplat(MaxNode *MN, Function *F) {
       new CPUMaxSplatNode(MN->getName(), input, splat->getValue()));
 }
 
+/// Try to replace ConvolutionNode to MO436 version
+static Node *convertConvToCeleraConv(ConvolutionNode *CN, Function *F) {
+  // Fused activation not supported for this replacement.
+  if (CN->hasFusedActivation()) {
+    return nullptr;
+  }
+  // Deep-wise convolution not supported for this replacement
+  if (CN->getGroup() !=1)  {
+    return nullptr;
+  }
+  // We only support Floats for now.
+  if (CN->getFilter().getElementType() != ElemKind::FloatTy) {
+    return nullptr;
+  }
+  return F->addNode(new CPUCeleraConvNode(
+      CN->getName(),
+      CN->getResult().getType(),
+      CN->getInput(),
+      CN->getFilter(),
+      CN->getBias(),
+      CN->getKernels(),
+      CN->getStrides(),
+      CN->getPads()));
+}
+
 Expected<bool>
 CPUBackend::transformPostLowering(Function *F, CompilationContext &,
                                   const glow::runtime::DeviceInfo *) const {
@@ -142,31 +167,18 @@ CPUBackend::transformPostLowering(Function *F, CompilationContext &,
       if (EnableCeleraConv) {
         std::cout << "Thais: conv enabled\n";
 
-        // Skip depthwise conv
-        if (CN->getGroup() != 1) {
+        if (Node *NC = convertConvToCeleraConv(CN, F)) {
+          CN->getResult().replaceAllUsesOfWith(NC);
+          changed = true;
           continue;
         }
 
-        auto *newNode = F->addNode(new CPUCeleraConvNode(
-            CN->getName(),
-            CN->getResult().getType(),
-            CN->getInput(),
-            CN->getFilter(),
-            CN->getBias(),
-            CN->getKernels(),
-            CN->getStrides(),
-            CN->getPads(),
-            CN->getGroup()));
-
-        CN->getResult().replaceAllUsesOfWith(newNode);
-        changed = true;
-        continue;
-      }
-
-      if (Node *NCN = optimizeCPUConv(CN, F)) {
-        CN->getResult().replaceAllUsesOfWith(NCN);
-        changed = true;
-        continue;
+      }else {
+        if (Node *NCN = optimizeCPUConv(CN, F)) {
+          CN->getResult().replaceAllUsesOfWith(NCN);
+          changed = true;
+          continue;
+        }
       }
     }
 
